@@ -69,6 +69,7 @@ Core endpoints:
 - `GET /history`
 - `GET /reports/{request_id}/csv`
 - `GET /reports/{request_id}/pdf`
+- `GET /reports/{request_id}/pdb`
 
 Example prediction request:
 
@@ -94,7 +95,11 @@ The UI includes:
 - a results page with Binding Score chart
 - a Three.js pocket-center viewer
 - CSV/PDF report download links
+- PDB pocket marker download
 - recent user request history stored in the browser and refreshed from the API
+
+For PostgreSQL, MinIO, Redis/RQ, auth/RBAC, encryption, and enterprise
+deployment, see [`docs/ENTERPRISE.md`](ENTERPRISE.md).
 
 Build the UI:
 

@@ -151,6 +151,9 @@ function ResultPage({ result }) {
           <a href={absoluteUrl(result.report_pdf_url)} download>
             Download PDF
           </a>
+          <a href={absoluteUrl(result.pocket_pdb_url)} download>
+            Download PDB
+          </a>
         </div>
       </div>
       <div className="metrics">
@@ -272,6 +275,7 @@ function App() {
           confidence: payload.confidence,
           report_csv_url: payload.report_csv_url,
           report_pdf_url: payload.report_pdf_url,
+          pocket_pdb_url: payload.pocket_pdb_url,
         },
         ...current.filter((item) => item.request_id !== payload.request_id),
       ].slice(0, 10));
@@ -382,6 +386,9 @@ function App() {
                   </a>
                   <a href={absoluteUrl(item.report_pdf_url)} download>
                     PDF
+                  </a>
+                  <a href={absoluteUrl(item.pocket_pdb_url)} download>
+                    PDB
                   </a>
                 </div>
               </article>

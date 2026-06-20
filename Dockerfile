@@ -9,6 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HQCA_METRICS_FILE=/app/output/hqca_metrics.json \
     HQCA_REPORT_FILE=/app/output/data_report.txt \
     HQCA_API_OUTPUT_DIR=/app/output/api \
+    HQCA_OBJECT_STORE_DIR=/app/output/objects \
+    HQCA_DATABASE_URL=sqlite:////app/output/hqca.db \
+    HQCA_QUEUE_BACKEND=background \
     HQCA_MODEL_ARTIFACT=/app/models/hqca_model.joblib
 
 WORKDIR /app

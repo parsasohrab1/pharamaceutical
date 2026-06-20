@@ -264,8 +264,9 @@ def variational_circuit(features, params):
 - `GET /history`
 - `GET /reports/{request_id}/csv`
 - `GET /reports/{request_id}/pdf`
+- `GET /reports/{request_id}/pdb`
 
-UI محصول شامل صفحه نتایج، نمودار Binding Score، نمایش سه‌بعدی جیب اتصال با Three.js، تاریخچه درخواست‌ها و دانلود گزارش CSV/PDF است.
+UI محصول شامل صفحه نتایج، نمودار Binding Score، نمایش سه‌بعدی جیب اتصال با Three.js، تاریخچه درخواست‌ها و دانلود گزارش CSV/PDF/PDB است.
 
 برای نصب محلی، اجرای API، اجرای UI، Docker، تنظیمات محیطی، تست خودکار، CI/CD، لاگ ساخت‌یافته و مانیتورینگ پایه، فایل زیر را ببینید:
 
@@ -274,6 +275,10 @@ UI محصول شامل صفحه نتایج، نمودار Binding Score، نما
 برای اتصال دیتاست‌های واقعی BindingDB/PDBbind، آموزش baseline کلاسیک، ذخیره مدل/پارامترهای VQC و محاسبه MAE، فایل زیر را ببینید:
 
 - [`docs/DATASETS_AND_TRAINING.md`](docs/DATASETS_AND_TRAINING.md)
+
+برای استفاده سازمانی با PostgreSQL، MinIO، Redis/RQ، احراز هویت، RBAC و رمزنگاری داده‌های حساس، فایل زیر را ببینید:
+
+- [`docs/ENTERPRISE.md`](docs/ENTERPRISE.md)
 
 ---
 
