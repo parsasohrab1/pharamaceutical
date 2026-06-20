@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hqca"
+version = "0.1.0"
+description = "Hybrid Quantum-Classical Assistant synthetic data pipeline for drug discovery."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography",
+    "fastapi",
+    "joblib",
+    "minio",
+    "numpy",
+    "pandas",
+    "psycopg[binary]",
+    "PyJWT",
+    "rdkit",
+    "redis",
+    "reportlab",
+    "rq",
+    "scikit-learn",
+    "sqlalchemy",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+quantum = [
+    "pennylane",
+]
+xgboost = [
+    "xgboost",
+]
+dev = [
+    "httpx",
+    "pytest",
+]
+
+[project.scripts]
+hqca-train = "training:main"
+
+[tool.setuptools]
+py-modules = ["api", "data", "database", "queueing", "scoring", "security", "storage", "training"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
