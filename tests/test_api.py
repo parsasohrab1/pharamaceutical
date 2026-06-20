@@ -25,15 +25,40 @@ def test_predict_returns_standard_output():
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {
+        "request_id",
+        "created_at",
         "binding_score",
         "binding_energy_kcal_mol",
         "confidence",
         "pocket_center",
+        "report_csv_url",
+        "report_pdf_url",
     }
     assert 0 <= payload["binding_score"] <= 100
     assert -15 <= payload["binding_energy_kcal_mol"] <= -0.1
     assert 0 <= payload["confidence"] <= 100
     assert set(payload["pocket_center"]) == {"x", "y", "z"}
+    assert payload["report_csv_url"].endswith("/csv")
+    assert payload["report_pdf_url"].endswith("/pdf")
+
+
+def test_prediction_reports_and_history_are_downloadable():
+    response = client.post(
+        "/predict",
+        json={"smiles": "CCO", "fasta": ">target\nACDEFGHIKLMNPQRSTVWY"},
+    )
+    payload = response.json()
+
+    csv_response = client.get(payload["report_csv_url"])
+    pdf_response = client.get(payload["report_pdf_url"])
+    history_response = client.get("/history")
+
+    assert csv_response.status_code == 200
+    assert "binding_score" in csv_response.text
+    assert pdf_response.status_code == 200
+    assert pdf_response.headers["content-type"].startswith("application/pdf")
+    assert history_response.status_code == 200
+    assert any(item["request_id"] == payload["request_id"] for item in history_response.json())
 
 
 def test_predict_rejects_invalid_smiles_and_fasta():

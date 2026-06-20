@@ -261,6 +261,11 @@ def variational_circuit(features, params):
 - `POST /predict`
 - `POST /generate_synthetic`
 - `GET /status/{task_id}`
+- `GET /history`
+- `GET /reports/{request_id}/csv`
+- `GET /reports/{request_id}/pdf`
+
+UI محصول شامل صفحه نتایج، نمودار Binding Score، نمایش سه‌بعدی جیب اتصال با Three.js، تاریخچه درخواست‌ها و دانلود گزارش CSV/PDF است.
 
 برای نصب محلی، اجرای API، اجرای UI، Docker، تنظیمات محیطی، تست خودکار، CI/CD، لاگ ساخت‌یافته و مانیتورینگ پایه، فایل زیر را ببینید:
 

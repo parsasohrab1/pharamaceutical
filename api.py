@@ -10,10 +10,14 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import numpy as np
+import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from rdkit import Chem
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 from data import (
     LOGGER,
@@ -29,6 +33,7 @@ from training import load_model_artifact, predict_energy_from_artifact
 
 VALID_AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
 DEFAULT_OUTPUT_DIR = Path(os.getenv("HQCA_API_OUTPUT_DIR", "output/api"))
+REPORTS_DIR = DEFAULT_OUTPUT_DIR / "reports"
 
 
 def utc_now() -> str:
@@ -84,10 +89,14 @@ class PocketCenter(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    request_id: str
+    created_at: str
     binding_score: float
     binding_energy_kcal_mol: float
     confidence: float
     pocket_center: PocketCenter
+    report_csv_url: str
+    report_pdf_url: str
 
 
 class GenerateSyntheticRequest(BaseModel):
@@ -119,6 +128,18 @@ class TaskStatus(BaseModel):
     error: Optional[str] = None
 
 
+class PredictionHistoryItem(BaseModel):
+    request_id: str
+    created_at: str
+    smiles: str
+    fasta_preview: str
+    binding_score: float
+    binding_energy_kcal_mol: float
+    confidence: float
+    report_csv_url: str
+    report_pdf_url: str
+
+
 class PredictionService:
     def __init__(self) -> None:
         self.pocket_generator = SyntheticPocketGenerator(random_seed=42)
@@ -133,6 +154,8 @@ class PredictionService:
             )
 
     def predict(self, request: PredictRequest) -> PredictResponse:
+        request_id = uuid.uuid4().hex
+        created_at = utc_now()
         descriptors = MolecularDescriptors.compute(request.smiles)
         features = normalize_descriptors(descriptors.to_array())
         pocket = self.pocket_generator.generate_pocket(
@@ -144,7 +167,9 @@ class PredictionService:
         else:
             energy = float(self.quantum_simulator.predict_affinity(features, optimize=False))
         center = pocket["center"]
-        return PredictResponse(
+        response = PredictResponse(
+            request_id=request_id,
+            created_at=created_at,
             binding_score=binding_energy_to_score(energy),
             binding_energy_kcal_mol=round(energy, 4),
             confidence=estimate_confidence(features, len(request.fasta)),
@@ -153,12 +178,68 @@ class PredictionService:
                 y=round(float(center[1]), 4),
                 z=round(float(center[2]), 4),
             ),
+            report_csv_url=f"/reports/{request_id}/csv",
+            report_pdf_url=f"/reports/{request_id}/pdf",
         )
+        write_prediction_reports(request, response)
+        prediction_history[request_id] = PredictionHistoryItem(
+            request_id=request_id,
+            created_at=created_at,
+            smiles=request.smiles,
+            fasta_preview=request.fasta[:80],
+            binding_score=response.binding_score,
+            binding_energy_kcal_mol=response.binding_energy_kcal_mol,
+            confidence=response.confidence,
+            report_csv_url=response.report_csv_url,
+            report_pdf_url=response.report_pdf_url,
+        )
+        return response
 
 
 prediction_service = PredictionService()
 task_lock = threading.Lock()
 tasks: Dict[str, TaskStatus] = {}
+prediction_history: Dict[str, PredictionHistoryItem] = {}
+
+
+def report_paths(request_id: str) -> tuple[Path, Path]:
+    return REPORTS_DIR / f"{request_id}.csv", REPORTS_DIR / f"{request_id}.pdf"
+
+
+def write_prediction_reports(request: PredictRequest, response: PredictResponse) -> None:
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    csv_path, pdf_path = report_paths(response.request_id)
+    row = {
+        "request_id": response.request_id,
+        "created_at": response.created_at,
+        "smiles": request.smiles,
+        "fasta": request.fasta,
+        "binding_score": response.binding_score,
+        "binding_energy_kcal_mol": response.binding_energy_kcal_mol,
+        "confidence": response.confidence,
+        "pocket_center_x": response.pocket_center.x,
+        "pocket_center_y": response.pocket_center.y,
+        "pocket_center_z": response.pocket_center.z,
+    }
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    pdf = canvas.Canvas(str(pdf_path), pagesize=letter)
+    width, height = letter
+    y = height - 72
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(72, y, "HQCA Binding Prediction Report")
+    y -= 34
+    pdf.setFont("Helvetica", 10)
+    for label, value in row.items():
+        if label == "fasta":
+            value = f"{str(value)[:120]}..."
+        pdf.drawString(72, y, f"{label}: {value}")
+        y -= 18
+        if y < 72:
+            pdf.showPage()
+            pdf.setFont("Helvetica", 10)
+            y = height - 72
+    pdf.save()
 
 
 def update_task(task_id: str, **updates: object) -> None:
@@ -221,6 +302,35 @@ def healthz() -> Dict[str, object]:
 @app.post("/predict", response_model=PredictResponse)
 def predict(request: PredictRequest) -> PredictResponse:
     return prediction_service.predict(request)
+
+
+@app.get("/history", response_model=List[PredictionHistoryItem])
+def history() -> List[PredictionHistoryItem]:
+    return sorted(prediction_history.values(), key=lambda item: item.created_at, reverse=True)
+
+
+@app.get("/reports/{request_id}/csv")
+def download_prediction_csv(request_id: str) -> FileResponse:
+    csv_path, _ = report_paths(request_id)
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail="CSV report not found.")
+    return FileResponse(
+        csv_path,
+        media_type="text/csv",
+        filename=f"hqca_prediction_{request_id}.csv",
+    )
+
+
+@app.get("/reports/{request_id}/pdf")
+def download_prediction_pdf(request_id: str) -> FileResponse:
+    _, pdf_path = report_paths(request_id)
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF report not found.")
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=f"hqca_prediction_{request_id}.pdf",
+    )
 
 
 @app.post("/generate_synthetic", response_model=GenerateSyntheticResponse, status_code=202)

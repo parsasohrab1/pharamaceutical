@@ -66,6 +66,9 @@ Core endpoints:
 - `POST /predict`
 - `POST /generate_synthetic`
 - `GET /status/{task_id}`
+- `GET /history`
+- `GET /reports/{request_id}/csv`
+- `GET /reports/{request_id}/pdf`
 
 Example prediction request:
 
@@ -84,6 +87,14 @@ VITE_API_BASE_URL=http://localhost:8000 npm run dev
 ```
 
 Open <http://localhost:5173>.
+
+The UI includes:
+
+- a prediction input form
+- a results page with Binding Score chart
+- a Three.js pocket-center viewer
+- CSV/PDF report download links
+- recent user request history stored in the browser and refreshed from the API
 
 Build the UI:
 
