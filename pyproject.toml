@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hqca"
+version = "0.1.0"
+description = "Hybrid Quantum-Classical Assistant synthetic data pipeline for drug discovery."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "rdkit",
+]
+
+[project.optional-dependencies]
+quantum = [
+    "pennylane",
+]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools]
+py-modules = ["data"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

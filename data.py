@@ -9,21 +9,90 @@
 
 import os
 import json
+import logging
 import random
+import sys
+import time
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import warnings
 warnings.filterwarnings('ignore')
+
+
+class JsonFormatter(logging.Formatter):
+    """Minimal JSON formatter for container and CI friendly structured logs."""
+
+    EXTRA_FIELDS = {
+        "event",
+        "sample_index",
+        "num_pairs",
+        "output_csv",
+        "output_json",
+        "output_metrics",
+        "output_report",
+        "records_generated",
+        "records_failed",
+        "duration_seconds",
+        "rdkit_available",
+        "pennylane_available",
+        "use_quantum",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(
+                timespec="milliseconds"
+            ).replace("+00:00", "Z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for field in self.EXTRA_FIELDS:
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def setup_logging() -> logging.Logger:
+    log_level = os.getenv("HQCA_LOG_LEVEL", "INFO").upper()
+    log_format = os.getenv("HQCA_LOG_FORMAT", "json").lower()
+    handler = logging.StreamHandler(sys.stdout)
+    if log_format == "json":
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+
+    logger = logging.getLogger("hqca")
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
+    logger.propagate = False
+    return logger
+
+
+LOGGER = setup_logging()
+
+
+def ensure_parent_directory(path: Optional[str]) -> None:
+    if not path:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
 # ===============================
 # بررسی دسترسی به کتابخانه‌های تخصصی
 # ===============================
 try:
-    from rdkit import Chem
-    from rdkit.Chem import Descriptors, AllChem, Lipinski
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import Descriptors, Lipinski
+    if os.getenv("HQCA_RDKIT_LOGS", "disabled").lower() == "disabled":
+        RDLogger.DisableLog("rdApp.*")
     RDKIT_AVAILABLE = True
 except ImportError:
     RDKIT_AVAILABLE = False
@@ -34,7 +103,10 @@ try:
     PENNYLANE_AVAILABLE = True
 except ImportError:
     PENNYLANE_AVAILABLE = False
-    print("PennyLane در دسترس نیست. از شبیه‌ساز کلاسیک جایگزین استفاده می‌شود.")
+    LOGGER.warning(
+        "PennyLane در دسترس نیست. از شبیه‌ساز کلاسیک جایگزین استفاده می‌شود.",
+        extra={"event": "optional_dependency_missing", "pennylane_available": False},
+    )
 
 # ===============================
 # 1. کلاس تولید کننده مولکول‌های دارویی سنتتیک
@@ -224,6 +296,14 @@ class QuantumVQESimulator:
     def __init__(self, n_qubits: int = 7, use_quantum: bool = True):
         self.n_qubits = n_qubits
         self.use_quantum = use_quantum and PENNYLANE_AVAILABLE
+        LOGGER.info(
+            "Quantum simulator initialized.",
+            extra={
+                "event": "quantum_simulator_initialized",
+                "pennylane_available": PENNYLANE_AVAILABLE,
+                "use_quantum": self.use_quantum,
+            },
+        )
         if self.use_quantum:
             self.dev = qml.device('default.qubit', wires=n_qubits)
             self._circuit = self._build_circuit()
@@ -327,36 +407,118 @@ class SyntheticDataPipeline:
             'pocket_length': pocket['length']
         }
     
-    def generate_dataset(self, num_pairs: int, output_csv: str = "synthetic_dataset.csv", 
-                         output_json: Optional[str] = None) -> pd.DataFrame:
+    def generate_dataset(self, num_pairs: int, output_csv: str = "synthetic_dataset.csv",
+                         output_json: Optional[str] = None,
+                         output_metrics: Optional[str] = None) -> pd.DataFrame:
         """
         تولید num_pairs جفت و ذخیره در فایل CSV و اختیاری JSON.
         """
+        started_at = datetime.now(timezone.utc)
+        start_time = time.perf_counter()
         records = []
-        print(f"شروع تولید {num_pairs} نمونه سنتتیک...")
+        failed_records = 0
+        LOGGER.info(
+            "Starting synthetic dataset generation.",
+            extra={
+                "event": "dataset_generation_started",
+                "num_pairs": num_pairs,
+                "output_csv": output_csv,
+                "output_json": output_json,
+                "output_metrics": output_metrics,
+            },
+        )
         for i in range(num_pairs):
             if (i+1) % 100 == 0 or i == 0:
-                print(f"پیشرفت: {i+1}/{num_pairs}")
+                LOGGER.info(
+                    "Synthetic dataset generation progress.",
+                    extra={
+                        "event": "dataset_generation_progress",
+                        "sample_index": i + 1,
+                        "num_pairs": num_pairs,
+                    },
+                )
             try:
                 rec = self.generate_pair()
                 records.append(rec)
             except Exception as e:
-                print(f"خطا در تولید نمونه {i+1}: {e}")
+                failed_records += 1
+                LOGGER.exception(
+                    f"خطا در تولید نمونه {i+1}: {e}",
+                    extra={"event": "dataset_generation_sample_failed", "sample_index": i + 1},
+                )
                 continue
         
+        ensure_parent_directory(output_csv)
+        ensure_parent_directory(output_json)
+        ensure_parent_directory(output_metrics)
+
         df = pd.DataFrame(records)
         df.to_csv(output_csv, index=False)
-        print(f"داده‌ها در فایل {output_csv} ذخیره شدند.")
+        LOGGER.info(
+            "Synthetic dataset CSV written.",
+            extra={
+                "event": "dataset_csv_written",
+                "records_generated": len(df),
+                "records_failed": failed_records,
+                "output_csv": output_csv,
+            },
+        )
         
         if output_json:
             # تبدیل به فرمت JSON قابل خواندن
             with open(output_json, 'w') as f:
-                json.dump(records, f, indent=2)
-            print(f"داده‌ها همچنین در {output_json} ذخیره شدند.")
+                json.dump(records, f, indent=2, default=float)
+            LOGGER.info(
+                "Synthetic dataset JSON written.",
+                extra={"event": "dataset_json_written", "output_json": output_json},
+            )
+
+        duration_seconds = round(time.perf_counter() - start_time, 3)
+        metrics = {
+            "started_at": started_at.isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "duration_seconds": duration_seconds,
+            "num_pairs_requested": num_pairs,
+            "records_generated": int(len(df)),
+            "records_failed": int(failed_records),
+            "rdkit_available": RDKIT_AVAILABLE,
+            "pennylane_available": PENNYLANE_AVAILABLE,
+            "use_quantum": bool(self.quantum_sim.use_quantum),
+            "output_csv": output_csv,
+            "output_json": output_json,
+        }
+        if output_metrics:
+            with open(output_metrics, 'w', encoding='utf-8') as f:
+                json.dump(metrics, f, indent=2, ensure_ascii=False)
+            LOGGER.info(
+                "Synthetic dataset metrics written.",
+                extra={"event": "dataset_metrics_written", "output_metrics": output_metrics},
+            )
         
         # نمایش آمار ساده
-        print("\n--- آمار توصیفگرها ---")
-        print(df[['MW', 'LogP', 'HBD', 'HBA', 'binding_energy_kcal_mol']].describe())
+        if not df.empty:
+            LOGGER.info(
+                "Synthetic dataset generation completed.",
+                extra={
+                    "event": "dataset_generation_completed",
+                    "records_generated": len(df),
+                    "records_failed": failed_records,
+                    "duration_seconds": duration_seconds,
+                },
+            )
+            if os.getenv("HQCA_LOG_FORMAT", "json").lower() != "json":
+                print("\n--- آمار توصیفگرها ---")
+                print(df[['MW', 'LogP', 'HBD', 'HBA', 'binding_energy_kcal_mol']].describe())
+        else:
+            LOGGER.warning(
+                "Synthetic dataset generation completed without records.",
+                extra={
+                    "event": "dataset_generation_empty",
+                    "records_generated": 0,
+                    "records_failed": failed_records,
+                    "duration_seconds": duration_seconds,
+                },
+            )
         
         return df
 
@@ -365,6 +527,7 @@ class SyntheticDataPipeline:
 # ===============================
 def generate_report(df: pd.DataFrame, output_file: str = "data_report.txt"):
     """تولید گزارش آماری از داده‌های تولید شده برای پیوست اختراع"""
+    ensure_parent_directory(output_file)
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("گزارش تولید داده سنتتیک برای سامانه HQCA\n")
         f.write("========================================\n")
@@ -374,9 +537,25 @@ def generate_report(df: pd.DataFrame, output_file: str = "data_report.txt"):
         for col in ['MW', 'LogP', 'HBD', 'HBA', 'RotatableBonds', 'AromaticRings', 'TPSA', 'binding_energy_kcal_mol']:
             if col in df.columns:
                 f.write(f"{col}: min={df[col].min():.2f}, max={df[col].max():.2f}, mean={df[col].mean():.2f}\n")
-        f.write("\nتوزیع انرژی اتصال:\n")
-        f.write(df['binding_energy_kcal_mol'].value_counts(bins=10).to_string())
-    print(f"گزارش در {output_file} ذخیره شد.")
+        if 'binding_energy_kcal_mol' in df.columns:
+            f.write("\nتوزیع انرژی اتصال:\n")
+            f.write(df['binding_energy_kcal_mol'].value_counts(bins=10).to_string())
+    LOGGER.info("Report written.", extra={"event": "report_written", "output_report": output_file})
+
+
+def get_int_env(name: str, default: int) -> int:
+    """Read an integer environment variable with a safe fallback."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        LOGGER.warning(
+            f"Invalid integer for {name}; using default {default}.",
+            extra={"event": "invalid_environment_value"},
+        )
+        return default
 
 # ===============================
 # 7. اجرای نمونه (در صورت اجرای مستقیم)
@@ -391,16 +570,34 @@ if __name__ == "__main__":
         "CN1CCN(CC1)C2=CC=C(C=C2)C3=NC4=CC=CC=C4S3"  # کوتیرون
     ]
     
+    random_seed = get_int_env("HQCA_RANDOM_SEED", 2025)
+    num_pairs = get_int_env("HQCA_NUM_PAIRS", 500)
+    output_csv = os.getenv("HQCA_OUTPUT_CSV", "hqca_synthetic_data_500.csv")
+    output_json = os.getenv("HQCA_OUTPUT_JSON", "hqca_synthetic_data_500.json")
+    output_metrics = os.getenv("HQCA_METRICS_FILE", "hqca_metrics.json")
+    output_report = os.getenv("HQCA_REPORT_FILE", "data_report.txt")
+
     # ایجاد خط لوله
-    pipeline = SyntheticDataPipeline(seed_smiles_list, random_state=2025)
-    
-    # تولید ۵۰۰ نمونه (برای آزمایش، می‌توانید به ۱۰۰۰ یا بیشتر افزایش دهید)
-    df = pipeline.generate_dataset(num_pairs=500, 
-                                   output_csv="hqca_synthetic_data_500.csv",
-                                   output_json="hqca_synthetic_data_500.json")
-    
+    pipeline = SyntheticDataPipeline(seed_smiles_list, random_state=random_seed)
+
+    # تولید داده‌ها با پارامترهای قابل تنظیم از محیط اجرا
+    df = pipeline.generate_dataset(
+        num_pairs=num_pairs,
+        output_csv=output_csv,
+        output_json=output_json,
+        output_metrics=output_metrics,
+    )
+
     # تولید گزارش
-    generate_report(df, "data_report.txt")
-    
-    print("\n✅ فرآیند تولید داده سنتتیک با موفقیت پایان یافت.")
-    print("اکنون می‌توانید از این داده‌ها برای آموزش مدل QML خود استفاده کنید.")
+    generate_report(df, output_report)
+
+    LOGGER.info(
+        "Synthetic data generation finished successfully.",
+        extra={
+            "event": "main_completed",
+            "records_generated": len(df),
+            "output_csv": output_csv,
+            "output_json": output_json,
+            "output_metrics": output_metrics,
+        },
+    )

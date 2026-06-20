@@ -1,0 +1,15 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.pyc
+.venv
+venv
+dist
+build
+*.egg-info
+output
+hqca_synthetic_data_*.csv
+hqca_synthetic_data_*.json
+hqca_metrics.json
+data_report.txt
