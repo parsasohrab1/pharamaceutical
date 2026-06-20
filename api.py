@@ -23,6 +23,8 @@ from data import (
     SyntheticPocketGenerator,
     normalize_descriptors,
 )
+from scoring import binding_energy_to_score
+from training import load_model_artifact, predict_energy_from_artifact
 
 
 VALID_AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
@@ -51,11 +53,6 @@ def validate_smiles(value: str) -> str:
     if Chem.MolFromSmiles(smiles) is None:
         raise ValueError("SMILES is not valid.")
     return smiles
-
-
-def binding_energy_to_score(energy: float) -> float:
-    score = ((abs(energy) - 0.1) / (15.0 - 0.1)) * 100.0
-    return round(float(np.clip(score, 0.0, 100.0)), 2)
 
 
 def estimate_confidence(features_normalized: np.ndarray, fasta_length: int) -> float:
@@ -126,6 +123,14 @@ class PredictionService:
     def __init__(self) -> None:
         self.pocket_generator = SyntheticPocketGenerator(random_seed=42)
         self.quantum_simulator = QuantumVQESimulator(n_qubits=7)
+        self.model_artifact_path = os.getenv("HQCA_MODEL_ARTIFACT")
+        self.model_artifact = None
+        if self.model_artifact_path and Path(self.model_artifact_path).exists():
+            self.model_artifact = load_model_artifact(self.model_artifact_path)
+            LOGGER.info(
+                "Prediction model artifact loaded.",
+                extra={"event": "model_artifact_loaded", "output_metrics": self.model_artifact_path},
+            )
 
     def predict(self, request: PredictRequest) -> PredictResponse:
         descriptors = MolecularDescriptors.compute(request.smiles)
@@ -134,7 +139,10 @@ class PredictionService:
             sequence=request.fasta,
             length=min(max(len(request.fasta), 1), 60),
         )
-        energy = float(self.quantum_simulator.predict_affinity(features, optimize=False))
+        if self.model_artifact is not None:
+            energy = predict_energy_from_artifact(self.model_artifact, features)
+        else:
+            energy = float(self.quantum_simulator.predict_affinity(features, optimize=False))
         center = pocket["center"]
         return PredictResponse(
             binding_score=binding_energy_to_score(energy),

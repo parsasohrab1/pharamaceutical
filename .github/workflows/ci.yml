@@ -36,6 +36,14 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Train smoke model
+        run: |
+          python training.py \
+            --dataset tests/fixtures/bindingdb_sample.csv \
+            --source bindingdb \
+            --artifact-dir /tmp/hqca-model \
+            --n-estimators 20
+
   frontend:
     name: Build React UI
     runs-on: ubuntu-latest

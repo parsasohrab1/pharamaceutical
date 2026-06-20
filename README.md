@@ -266,6 +266,10 @@ def variational_circuit(features, params):
 
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md)
 
+برای اتصال دیتاست‌های واقعی BindingDB/PDBbind، آموزش baseline کلاسیک، ذخیره مدل/پارامترهای VQC و محاسبه MAE، فایل زیر را ببینید:
+
+- [`docs/DATASETS_AND_TRAINING.md`](docs/DATASETS_AND_TRAINING.md)
+
 ---
 
 ## ۱۰. تاریخچه تغییرات

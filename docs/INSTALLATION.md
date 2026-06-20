@@ -110,7 +110,30 @@ python -m pytest
 ```
 
 The CI workflow runs the healthcheck and pytest suite on Python 3.11 and 3.12,
-builds the React UI, and builds the Docker image.
+trains a smoke model on the fixture dataset, builds the React UI, and builds the
+Docker image.
+
+## Train on BindingDB/PDBbind data
+
+See [`docs/DATASETS_AND_TRAINING.md`](DATASETS_AND_TRAINING.md) for supported
+CSV columns, the nM/pKd to energy conversion, the documented binding score
+formula, RandomForest baseline training, VQC parameter artifact saving, and MAE
+benchmark outputs.
+
+Example:
+
+```bash
+python training.py \
+  --dataset data/raw/bindingdb_subset.csv \
+  --source bindingdb \
+  --artifact-dir models
+```
+
+Use the trained artifact in the API:
+
+```bash
+HQCA_MODEL_ARTIFACT=models/hqca_model.joblib uvicorn api:app --reload
+```
 
 ## Docker
 

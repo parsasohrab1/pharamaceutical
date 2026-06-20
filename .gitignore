@@ -8,7 +8,9 @@ build/
 *.egg-info/
 
 # Generated HQCA outputs
+data/raw/
 output/
+models/
 hqca_synthetic_data_*.csv
 hqca_synthetic_data_*.json
 hqca_metrics.json

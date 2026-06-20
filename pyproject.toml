@@ -10,9 +10,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi",
+    "joblib",
     "numpy",
     "pandas",
     "rdkit",
+    "scikit-learn",
     "uvicorn",
 ]
 
@@ -20,13 +22,19 @@ dependencies = [
 quantum = [
     "pennylane",
 ]
+xgboost = [
+    "xgboost",
+]
 dev = [
     "httpx",
     "pytest",
 ]
 
+[project.scripts]
+hqca-train = "training:main"
+
 [tool.setuptools]
-py-modules = ["api", "data"]
+py-modules = ["api", "data", "scoring", "training"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
