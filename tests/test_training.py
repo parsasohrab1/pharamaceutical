@@ -14,7 +14,7 @@ FIXTURE_DATASET = "tests/fixtures/bindingdb_sample.csv"
 def test_affinity_nm_conversion_matches_thermodynamic_formula():
     energy = training.affinity_nm_to_energy(10.0)
 
-    assert energy == np.float64(energy)
+    assert isinstance(energy, float)
     assert energy == training.pkd_to_energy(8.0)
     assert math.isclose(energy, -10.9228, rel_tol=1e-3)
 
