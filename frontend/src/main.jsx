@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import * as THREE from "three";
 import "./styles.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -47,64 +46,80 @@ function PocketViewer({ center }) {
   useEffect(() => {
     if (!center || !mountRef.current) return undefined;
 
+    let disposed = false;
+    let cleanupScene = () => {};
     const mount = mountRef.current;
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf3f8fb);
-    const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / 320, 0.1, 1000);
-    camera.position.set(35, 28, 45);
-    camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(mount.clientWidth, 320);
-    mount.appendChild(renderer.domElement);
+    import("three").then((THREE) => {
+      if (disposed || !mountRef.current) return;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const light = new THREE.DirectionalLight(0xffffff, 0.8);
-    light.position.set(20, 30, 40);
-    scene.add(light);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf3f8fb);
+      const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / 320, 0.1, 1000);
+      camera.position.set(35, 28, 45);
+      camera.lookAt(0, 0, 0);
 
-    const grid = new THREE.GridHelper(60, 12, 0x9fb3c8, 0xd7e0ea);
-    scene.add(grid);
-    scene.add(new THREE.AxesHelper(18));
-
-    const geometry = new THREE.SphereGeometry(3.2, 32, 32);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x2b7a78,
-      metalness: 0.1,
-      roughness: 0.35,
-    });
-    const pocket = new THREE.Mesh(geometry, material);
-    pocket.position.set(center.x, center.y, center.z);
-    scene.add(pocket);
-
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(5.2, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0x3aafa9, transparent: true, opacity: 0.18 }),
-    );
-    halo.position.copy(pocket.position);
-    scene.add(halo);
-
-    let animationId;
-    function animate() {
-      pocket.rotation.y += 0.012;
-      halo.rotation.y -= 0.006;
-      renderer.render(scene, camera);
-      animationId = window.requestAnimationFrame(animate);
-    }
-    animate();
-
-    function resize() {
-      camera.aspect = mount.clientWidth / 320;
-      camera.updateProjectionMatrix();
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(mount.clientWidth, 320);
-    }
-    window.addEventListener("resize", resize);
+      mount.appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+      const light = new THREE.DirectionalLight(0xffffff, 0.8);
+      light.position.set(20, 30, 40);
+      scene.add(light);
+
+      const grid = new THREE.GridHelper(60, 12, 0x9fb3c8, 0xd7e0ea);
+      scene.add(grid);
+      scene.add(new THREE.AxesHelper(18));
+
+      const geometry = new THREE.SphereGeometry(3.2, 32, 32);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x2b7a78,
+        metalness: 0.1,
+        roughness: 0.35,
+      });
+      const pocket = new THREE.Mesh(geometry, material);
+      pocket.position.set(center.x, center.y, center.z);
+      scene.add(pocket);
+
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(5.2, 32, 32),
+        new THREE.MeshBasicMaterial({ color: 0x3aafa9, transparent: true, opacity: 0.18 }),
+      );
+      halo.position.copy(pocket.position);
+      scene.add(halo);
+
+      let animationId;
+      function animate() {
+        pocket.rotation.y += 0.012;
+        halo.rotation.y -= 0.006;
+        renderer.render(scene, camera);
+        animationId = window.requestAnimationFrame(animate);
+      }
+      animate();
+
+      function resize() {
+        camera.aspect = mount.clientWidth / 320;
+        camera.updateProjectionMatrix();
+        renderer.setSize(mount.clientWidth, 320);
+      }
+      window.addEventListener("resize", resize);
+
+      cleanupScene = () => {
+        window.cancelAnimationFrame(animationId);
+        window.removeEventListener("resize", resize);
+        geometry.dispose();
+        material.dispose();
+        renderer.dispose();
+        if (renderer.domElement.parentNode === mount) {
+          mount.removeChild(renderer.domElement);
+        }
+      };
+    });
 
     return () => {
-      window.cancelAnimationFrame(animationId);
-      window.removeEventListener("resize", resize);
-      renderer.dispose();
-      mount.removeChild(renderer.domElement);
+      disposed = true;
+      cleanupScene();
     };
   }, [center]);
 
