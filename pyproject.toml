@@ -9,9 +9,11 @@ description = "Hybrid Quantum-Classical Assistant synthetic data pipeline for dr
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "fastapi",
     "numpy",
     "pandas",
     "rdkit",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]
@@ -19,11 +21,12 @@ quantum = [
     "pennylane",
 ]
 dev = [
+    "httpx",
     "pytest",
 ]
 
 [tool.setuptools]
-py-modules = ["data"]
+py-modules = ["api", "data"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

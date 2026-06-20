@@ -1,13 +1,13 @@
 # HQCA Installation and Operations Guide
 
-This repository currently ships the HQCA synthetic data pipeline as a Python batch
-runtime. The infrastructure files in this guide provide a repeatable local,
-Docker, CI, and monitoring baseline.
+This repository ships an HQCA MVP with a FastAPI backend, a React UI, and the
+existing synthetic data pipeline as an internal service.
 
 ## Requirements
 
 - Python 3.10 or newer
 - `pip`
+- Node.js 22+ and npm for the React UI
 - Docker 24+ for containerized execution
 
 ## Local setup
@@ -47,8 +47,52 @@ Supported environment variables:
 | `HQCA_OUTPUT_JSON` | `hqca_synthetic_data_500.json` | JSON output path. |
 | `HQCA_METRICS_FILE` | `hqca_metrics.json` | Runtime metrics JSON output path. |
 | `HQCA_REPORT_FILE` | `data_report.txt` | Text report output path. |
+| `HQCA_API_OUTPUT_DIR` | `output/api` | Directory for API synthetic generation job outputs. |
+| `HQCA_CORS_ORIGINS` | `http://localhost:5173` | Comma-separated origins allowed to call the API. |
 
-## Run locally
+## Run the FastAPI backend
+
+```bash
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Open the interactive API docs:
+
+- Swagger UI: <http://localhost:8000/docs>
+- Healthcheck: <http://localhost:8000/healthz>
+
+Core endpoints:
+
+- `POST /predict`
+- `POST /generate_synthetic`
+- `GET /status/{task_id}`
+
+Example prediction request:
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"smiles":"CCO","fasta":">target\nACDEFGHIKLMNPQRSTVWY"}'
+```
+
+## Run the React UI
+
+```bash
+cd frontend
+npm install
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+Open <http://localhost:5173>.
+
+Build the UI:
+
+```bash
+cd frontend
+npm run build
+```
+
+## Run the batch pipeline locally
 
 ```bash
 HQCA_NUM_PAIRS=10 \
@@ -65,8 +109,8 @@ python data.py
 python -m pytest
 ```
 
-The CI workflow runs the healthcheck and the pytest suite on Python 3.11 and
-3.12.
+The CI workflow runs the healthcheck and pytest suite on Python 3.11 and 3.12,
+builds the React UI, and builds the Docker image.
 
 ## Docker
 
@@ -82,13 +126,22 @@ Build with PennyLane support:
 docker build --build-arg INSTALL_QUANTUM=true -t hqca-data-pipeline:quantum .
 ```
 
-Run a small dataset generation job:
+Run the API server:
+
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  -v "$PWD/output:/app/output" \
+  hqca-data-pipeline
+```
+
+Run the batch pipeline from the same image:
 
 ```bash
 docker run --rm \
   -e HQCA_NUM_PAIRS=10 \
   -v "$PWD/output:/app/output" \
-  hqca-data-pipeline
+  hqca-data-pipeline python data.py
 ```
 
 Run the container healthcheck manually:
@@ -112,13 +165,13 @@ HQCA_LOG_FORMAT=text python data.py
 
 ## Monitoring baseline
 
-The current product is a batch pipeline, so monitoring is file and process
-oriented:
+The current monitoring baseline covers both the API runtime and batch pipeline:
 
 1. `scripts/healthcheck.py` validates the runtime and RDKit descriptor path.
 2. `HQCA_METRICS_FILE` writes a JSON metrics file per run.
 3. Docker `HEALTHCHECK` executes the healthcheck script.
 4. CI fails if the healthcheck or tests fail.
+5. The API exposes `/healthz` for liveness checks.
 
 Example metrics output:
 

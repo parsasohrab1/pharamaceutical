@@ -256,7 +256,13 @@ def variational_circuit(features, params):
 
 ## راهنمای اجرا و زیرساخت
 
-برای نصب محلی، اجرای Docker، تنظیمات محیطی، تست خودکار، CI/CD، لاگ ساخت‌یافته و مانیتورینگ پایه، فایل زیر را ببینید:
+در نسخه MVP، یک backend مبتنی بر FastAPI و یک UI ساده React نیز اضافه شده است. endpointهای اصلی backend عبارت‌اند از:
+
+- `POST /predict`
+- `POST /generate_synthetic`
+- `GET /status/{task_id}`
+
+برای نصب محلی، اجرای API، اجرای UI، Docker، تنظیمات محیطی، تست خودکار، CI/CD، لاگ ساخت‌یافته و مانیتورینگ پایه، فایل زیر را ببینید:
 
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md)
 
