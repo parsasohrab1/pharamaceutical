@@ -1,6 +1,14 @@
 import time
+import warnings
 
-from fastapi.testclient import TestClient
+from starlette.exceptions import StarletteDeprecationWarning
+
+warnings.filterwarnings(
+    "ignore",
+    message="Using `httpx` with `starlette.testclient` is deprecated.*",
+    category=StarletteDeprecationWarning,
+)
+from starlette.testclient import TestClient
 
 from api import app
 
