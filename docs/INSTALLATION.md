@@ -2,47 +2,55 @@
 
 ## Requirements
 - Python 3.10+
-- Node.js optional (static frontend)
+- Optional: Docker, PostgreSQL, MinIO
 
 ## Local development
 
-```bash
+```powershell
 pip install -r requirements.txt
-uvicorn api:app --reload --host 127.0.0.1 --port 18080
+$env:HQCA_USE_MINIO = "false"
+$env:HQCA_DATABASE_URL = "sqlite:///output/hqca.db"
+$env:HQCA_PORT = "18080"
+python run_api.py
 ```
 
-Open API docs: http://localhost:8000/docs
+| Service | URL |
+|---------|-----|
+| Dashboard | http://127.0.0.1:5173 |
+| API Swagger | http://127.0.0.1:18080/docs |
+| Health | http://127.0.0.1:18080/health |
 
-Serve frontend (separate terminal):
+Frontend (second terminal):
 
-```bash
+```powershell
 cd frontend
-python -m http.server 5173
+python -m http.server 5173 --bind 127.0.0.1
 ```
 
 Default admin: `admin` / `admin12345`
 
 ## Docker
 
-```bash
+```powershell
 docker compose up --build
 ```
 
-- API: http://localhost:8000
+- API: http://localhost:8000 (inside compose)
 - Frontend: http://localhost:5173
 - MinIO console: http://localhost:9001
 
 ## Environment
 
-Copy `.env.example` to `.env` and set:
-- `HQCA_SECRET_KEY`
-- `HQCA_ENCRYPTION_KEY`
-- `HQCA_DATABASE_URL` (PostgreSQL in production)
-- MinIO settings when `HQCA_USE_MINIO=true`
+Copy `.env.example` to `.env`:
+
+- `HQCA_PORT` — API port (default `18080` on Windows)
+- `HQCA_SECRET_KEY` / `HQCA_ENCRYPTION_KEY`
+- `HQCA_DATABASE_URL` — PostgreSQL in production
+- `HQCA_USE_MINIO=true` + MinIO vars for object storage
 
 ## Acceptance tests
 
-```bash
+```powershell
+python -m pytest tests/ -q
 python evaluation.py
-pytest tests/
 ```

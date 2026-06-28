@@ -1,8 +1,8 @@
 # HQCA API Reference
 
-Base URL: `http://localhost:8000`
+**Base URL (local):** `http://127.0.0.1:18080`
 
-Swagger UI: `/docs`
+**Swagger UI:** http://127.0.0.1:18080/docs
 
 ## Authentication
 - `POST /auth/register` — create user (researcher role)
@@ -11,6 +11,7 @@ Swagger UI: `/docs`
 ## Prediction (FR-01, FR-02, FR-17, FR-18, FR-19)
 - `POST /predict`
   - Body: `{ "smiles": "CCO", "fasta": ">t\nACDEF...", "backend": "auto" }`
+  - Backends: `auto`, `pennylane_default_qubit`, `qiskit_aer_simulator`, `classical_fallback`
   - Response: binding score 0–100, confidence, PDB/CSV/PDF/3D viewer URLs
 
 ## Synthetic data (FR-04, FR-05, FR-06)
@@ -18,11 +19,9 @@ Swagger UI: `/docs`
 - `GET /status/{task_id}` — poll async job
 
 ## Admin / RBAC (NFR-06)
-- `GET /predictions/history` — researcher sees own results; admin sees all
+- `GET /predictions/history` — researcher: own results; admin: all
 - `GET /admin/logs` — admin only
 
-## Backends (FR-13)
-- `GET /health` — lists available quantum backends
-
-## Files
-- `GET /files/{path}` — download stored artifacts (MinIO or local)
+## System
+- `GET /health` — status + available quantum backends
+- `GET /files/{path}` — download stored artifacts

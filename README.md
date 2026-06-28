@@ -1,11 +1,63 @@
-در ادامه، یک سند **SRS (Software Requirements Specification)** کامل برای محصول «سامانه شبیه‌ساز ترکیبی کوآنتوم-کلاسیک برای طراحی و بهینه‌سازی مولکول‌های دارویی» تهیه شده است. این سند بر اساس استاندارد IEEE 830 و با توجه به نیازهای ثبت اختراع و تجاری‌سازی در ایران تدوین شده است.
+# HQCA — Hybrid Quantum-Classical Drug Discovery
+
+**نسخه MVP:** 1.1 | **وضعیت:** قابل اجرا (API + Dashboard + DB)
+
+سامانه شبیه‌ساز ترکیبی کوآنتوم-کلاسیک برای پیش‌بینی اتصال مولکول‌های دارویی به پروتئین هدف.
+
+---
+
+## اجرای سریع (Live Dashboard)
+
+```powershell
+pip install -r requirements.txt
+$env:HQCA_USE_MINIO = "false"
+$env:HQCA_DATABASE_URL = "sqlite:///output/hqca.db"
+python run_api.py          # ترمینال ۱ — API
+cd frontend; python -m http.server 5173 --bind 127.0.0.1   # ترمینال ۲ — UI
+```
+
+| سرویس | آدرس |
+|--------|------|
+| **Dashboard (UI)** | http://127.0.0.1:5173 |
+| **API Swagger** | http://127.0.0.1:18080/docs |
+| **Health check** | http://127.0.0.1:18080/health |
+
+**ورود پیش‌فرض:** `admin` / `admin12345`
+
+> پورت پیش‌فرض API روی Windows: `18080` (قابل تغییر با `HQCA_PORT`)
+
+## ساختار پروژه
+
+```
+api.py              FastAPI + RBAC + Swagger
+data.py             هسته کوانتومی (VQC, VQE, COBYLA)
+database.py         PostgreSQL / SQLite
+frontend/           داشبورد وب
+docker-compose.yml  PostgreSQL + MinIO + nginx
+tests/              تست یکپارچه API
+evaluation.py       معیارهای پذیرش AC-01 .. AC-05
+```
+
+## تست و استقرار
+
+```powershell
+python -m pytest tests/ -q
+python evaluation.py
+docker compose up --build
+```
+
+مستندات: [docs/INSTALLATION.md](docs/INSTALLATION.md) | [docs/API.md](docs/API.md)
+
+---
+
+در ادامه، سند **SRS (Software Requirements Specification)** کامل برای محصول «سامانه شبیه‌ساز ترکیبی کوآنتوم-کلاسیک برای طراحی و بهینه‌سازی مولکول‌های دارویی» تهیه شده است. این سند بر اساس استاندارد IEEE 830 و با توجه به نیازهای ثبت اختراع و تجاری‌سازی در ایران تدوین شده است.
 
 ---
 
 # سند الزامات نرم‌افزاری (SRS)
 ## سامانه شبیه‌ساز ترکیبی کوآنتوم-کلاسیک (HQCA)
-**نسخه:** 1.0  
-**تاریخ:** ۱۴۰۵/۰۳/۱۹  
+**نسخه:** 1.1  
+**تاریخ:** ۱۴۰۵/۰۳/۱۹ (SRS) — MVP: ۱۴۰۵/۰۴/۰۸
 **محصول:** HQCA (Hybrid Quantum-Classical Assistant for Drug Discovery)
 
 ---
@@ -260,6 +312,7 @@ def variational_circuit(features, params):
 |------|-------|---------|----------|
 | 0.1 | ۱۴۰۵/۰۳/۱۰ | تیم تحلیل | پیش‌نویس اولیه |
 | 1.0 | ۱۴۰۵/۰۳/۱۹ | تیم فنی | نهایی برای ثبت اختراع |
+| 1.1 | ۱۴۰۵/۰۴/۰۸ | تیم فنی | MVP: FastAPI، Dashboard، DB، COBYLA، PDF/3D |
 
 ---
 
