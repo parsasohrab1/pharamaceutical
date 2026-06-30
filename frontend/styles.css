@@ -54,3 +54,7 @@ button {
 .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
 .bar-val { text-align: left; color: var(--accent); }
 a { color: var(--accent); }
+.connection { margin-top: 0.75rem; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.85rem; display: inline-block; }
+.connection.connecting { background: #422006; color: #fbbf24; }
+.connection.connected { background: #064e3b; color: #34d399; }
+.connection.error { background: #450a0a; color: #f87171; }

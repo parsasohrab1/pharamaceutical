@@ -476,3 +476,25 @@ def get_file(file_path: str):
     if not local.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(local)
+
+
+# --- Dashboard UI (same origin — no CORS issues) ---
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+
+
+@app.get("/")
+def serve_dashboard():
+    index = FRONTEND_DIR / "index.html"
+    if not index.exists():
+        return {"message": "HQCA API", "docs": "/docs", "health": "/health"}
+    return FileResponse(index)
+
+
+@app.get("/app.js")
+def serve_dashboard_js():
+    return FileResponse(FRONTEND_DIR / "app.js", media_type="application/javascript")
+
+
+@app.get("/styles.css")
+def serve_dashboard_css():
+    return FileResponse(FRONTEND_DIR / "styles.css", media_type="text/css")

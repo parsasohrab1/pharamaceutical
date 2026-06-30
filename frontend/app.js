@@ -1,13 +1,73 @@
-const API = window.location.origin.includes("5173")
-  ? "http://127.0.0.1:18080"
-  : window.location.origin;
+/** HQCA Dashboard — auto-connect to API on load */
 
+let API = "";
 let token = localStorage.getItem("hqca_token") || "";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function apiCandidates() {
+  const origin = window.location.origin;
+  const list = [
+    "",
+    localStorage.getItem("hqca_api"),
+    origin.includes("5173") ? "http://127.0.0.1:18080" : null,
+    "http://127.0.0.1:18080",
+    "http://localhost:18080",
+  ].filter((v) => v !== null);
+  const seen = new Set();
+  return list.filter((v) => {
+    const key = v || "__same_origin__";
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function apiUrl(path) {
+  if (!path.startsWith("/")) path = `/${path}`;
+  return API ? `${API}${path}` : path;
+}
+
+function setConnectionStatus(state, message) {
+  const el = document.getElementById("connection-status");
+  el.className = `connection ${state}`;
+  el.textContent = message;
+}
+
+async function probeApi(base) {
+  const url = base ? `${base}/health` : "/health";
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) return null;
+  return base || window.location.origin;
+}
+
+async function ensureConnection() {
+  setConnectionStatus("connecting", "در حال اتصال به API...");
+  for (let attempt = 1; attempt <= 40; attempt++) {
+    for (const base of apiCandidates()) {
+      try {
+        const resolved = await probeApi(base);
+        if (resolved) {
+          API = base;
+          localStorage.setItem("hqca_api", resolved);
+          setConnectionStatus("connected", `✓ متصل — ${resolved}`);
+          return;
+        }
+      } catch {
+        /* try next candidate */
+      }
+    }
+    setConnectionStatus("connecting", `در حال اتصال... (${attempt}/40)`);
+    await sleep(1000);
+  }
+  setConnectionStatus("error", "✗ اتصال برقرار نشد — API را اجرا کنید: python run_dashboard.py");
+  throw new Error("API unavailable");
+}
 
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { ...options, headers });
+  const res = await fetch(apiUrl(path), { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail));
@@ -20,18 +80,18 @@ function showPrediction(item) {
   document.getElementById("result-summary").innerHTML = `
     <strong>SMILES:</strong> ${item.smiles_preview || item.smiles || "—"}<br/>
     <strong>نمره اتصال:</strong> ${item.binding_score} / 100<br/>
-    <strong>انرژی:</strong> ${(item.binding_energy_kcal_mol ?? 0).toFixed?.(3) ?? item.binding_energy_kcal_mol} kcal/mol<br/>
+    <strong>انرژی:</strong> ${Number(item.binding_energy_kcal_mol ?? 0).toFixed(3)} kcal/mol<br/>
     <strong>اطمینان:</strong> ${item.confidence}%<br/>
     <strong>Backend:</strong> ${item.backend || "auto"}
   `;
   const frame = document.getElementById("viewer-frame");
   if (item.viewer_html_url) {
-    frame.src = `${API}${item.viewer_html_url}`;
+    frame.src = apiUrl(item.viewer_html_url);
   }
   document.getElementById("download-links").innerHTML = `
-    <p><a href="${API}${item.report_pdf_url}" target="_blank">📄 PDF</a></p>
-    <p><a href="${API}${item.report_csv_url}" target="_blank">📊 CSV</a></p>
-    <p><a href="${API}${item.pocket_pdb_url}" target="_blank">🧬 PDB</a></p>
+    <p><a href="${apiUrl(item.report_pdf_url)}" target="_blank">PDF</a></p>
+    <p><a href="${apiUrl(item.report_csv_url)}" target="_blank">CSV</a></p>
+    <p><a href="${apiUrl(item.pocket_pdb_url)}" target="_blank">PDB</a></p>
   `;
 }
 
@@ -46,7 +106,7 @@ function renderChart(predictions) {
     .map(
       (p) => `
     <div class="bar-row">
-      <span class="bar-label">${p.smiles_preview?.slice(0, 12) || p.request_id.slice(0, 8)}</span>
+      <span class="bar-label">${(p.smiles_preview || p.request_id).slice(0, 12)}</span>
       <div class="bar-track"><div class="bar-fill" style="width:${(p.binding_score / max) * 100}%"></div></div>
       <span class="bar-val">${p.binding_score}</span>
     </div>`
@@ -63,7 +123,7 @@ function renderHistory(predictions) {
       <td>${p.smiles_preview}</td>
       <td>${p.binding_score}</td>
       <td>${p.confidence}%</td>
-      <td>${p.created_at?.slice(0, 19) || "—"}</td>
+      <td>${(p.created_at || "").slice(0, 19) || "—"}</td>
     </tr>`
     )
     .join("");
@@ -85,9 +145,9 @@ function renderDataset(datasets) {
   panel.innerHTML = `
     <p><strong>Task:</strong> ${d.task_id}</p>
     <p><strong>نمونه‌ها:</strong> ${d.records_generated} / ${d.num_samples}</p>
-    <p><a href="${API}${d.output_csv}" target="_blank">دانلود CSV</a></p>
-    <p><a href="${API}${d.output_json}" target="_blank">دانلود JSON</a></p>
-    <p><a href="${API}${d.output_pdf}" target="_blank">دانلود PDF</a></p>
+    <p><a href="${apiUrl(d.output_csv)}" target="_blank">دانلود CSV</a></p>
+    <p><a href="${apiUrl(d.output_json)}" target="_blank">دانلود JSON</a></p>
+    <p><a href="${apiUrl(d.output_pdf)}" target="_blank">دانلود PDF</a></p>
   `;
 }
 
@@ -115,7 +175,14 @@ async function autoLogin() {
   await loadDashboard();
 }
 
-document.getElementById("login-btn").onclick = autoLogin;
+document.getElementById("login-btn").onclick = async () => {
+  try {
+    await ensureConnection();
+    await autoLogin();
+  } catch (e) {
+    document.getElementById("auth-status").textContent = e.message;
+  }
+};
 
 document.getElementById("predict-btn").onclick = async () => {
   const body = {
@@ -147,7 +214,12 @@ document.getElementById("generate-btn").onclick = async () => {
   }, 2000);
 };
 
-autoLogin().catch((e) => {
-  document.getElementById("auth-status").textContent = "ورود دستی لازم است";
+async function bootstrap() {
+  await ensureConnection();
+  await autoLogin();
+}
+
+bootstrap().catch((e) => {
+  document.getElementById("auth-status").textContent = "ورود دستی پس از اتصال API";
   document.getElementById("result-summary").textContent = e.message;
 });

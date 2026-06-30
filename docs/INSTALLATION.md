@@ -4,30 +4,32 @@
 - Python 3.10+
 - Optional: Docker, PostgreSQL, MinIO
 
-## Local development
+## Quick start (auto-connect dashboard)
 
 ```powershell
 pip install -r requirements.txt
-$env:HQCA_USE_MINIO = "false"
-$env:HQCA_DATABASE_URL = "sqlite:///output/hqca.db"
-$env:HQCA_PORT = "18080"
-python run_api.py
+python run_dashboard.py
 ```
+
+Opens **http://127.0.0.1:18080/** — dashboard and API on the same server (connection automatic).
 
 | Service | URL |
 |---------|-----|
-| Dashboard | http://127.0.0.1:5173 |
-| API Swagger | http://127.0.0.1:18080/docs |
-| Health | http://127.0.0.1:18080/health |
-
-Frontend (second terminal):
-
-```powershell
-cd frontend
-python -m http.server 5173 --bind 127.0.0.1
-```
+| **Dashboard** | http://127.0.0.1:18080/ |
+| **API Swagger** | http://127.0.0.1:18080/docs |
+| **Health** | http://127.0.0.1:18080/health |
 
 Default admin: `admin` / `admin12345`
+
+## Manual start
+
+```powershell
+$env:HQCA_USE_MINIO = "false"
+$env:HQCA_DATABASE_URL = "sqlite:///output/hqca.db"
+python run_api.py
+```
+
+Legacy separate frontend (port 5173) still works with API retry logic.
 
 ## Docker
 
@@ -35,20 +37,11 @@ Default admin: `admin` / `admin12345`
 docker compose up --build
 ```
 
-- API: http://localhost:8000 (inside compose)
-- Frontend: http://localhost:5173
-- MinIO console: http://localhost:9001
-
 ## Environment
 
-Copy `.env.example` to `.env`:
+Copy `.env.example` to `.env` — set `HQCA_PORT`, secrets, database URL.
 
-- `HQCA_PORT` — API port (default `18080` on Windows)
-- `HQCA_SECRET_KEY` / `HQCA_ENCRYPTION_KEY`
-- `HQCA_DATABASE_URL` — PostgreSQL in production
-- `HQCA_USE_MINIO=true` + MinIO vars for object storage
-
-## Acceptance tests
+## Tests
 
 ```powershell
 python -m pytest tests/ -q
