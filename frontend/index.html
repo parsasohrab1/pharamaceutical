@@ -3,16 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HQCA — Drug Binding Simulator</title>
+  <title>HQCA — Drug Binding Dashboard</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header>
-    <h1>HQCA</h1>
-    <p>سامانه شبیه‌ساز کوآنتوم-کلاسیک برای پیش‌بینی اتصال دارو</p>
+    <h1>HQCA Dashboard</h1>
+    <p>سامانه شبیه‌ساز کوآنتوم-کلاسیک — داده‌های آماده نمایش</p>
   </header>
 
   <main>
+    <section class="card stats-grid" id="stats-section">
+      <div class="stat-box"><span id="stat-predictions">—</span><label>پیش‌بینی‌ها</label></div>
+      <div class="stat-box"><span id="stat-datasets">—</span><label>دیتاست‌ها</label></div>
+      <div class="stat-box"><span id="stat-avg-score">—</span><label>میانگین نمره</label></div>
+    </section>
+
     <section class="card" id="auth-section">
       <h2>ورود</h2>
       <input id="username" placeholder="نام کاربری" value="admin" />
@@ -22,17 +28,35 @@
     </section>
 
     <section class="card">
-      <h2>پیش‌بینی اتصال (FR-01 / FR-02)</h2>
+      <h2>نتایج ذخیره‌شده (FR-17 / FR-18 / FR-19)</h2>
+      <div id="result-summary">در حال بارگذاری...</div>
+      <div id="score-chart" class="chart"></div>
+      <iframe id="viewer-frame" title="3D pocket viewer"></iframe>
+      <div id="download-links"></div>
+      <table id="history-table">
+        <thead>
+          <tr><th>SMILES</th><th>نمره</th><th>اطمینان</th><th>تاریخ</th></tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>دیتاست سنتتیک آماده</h2>
+      <div id="dataset-panel">در حال بارگذاری...</div>
+    </section>
+
+    <section class="card">
+      <h2>پیش‌بینی جدید</h2>
       <label>SMILES</label>
       <input id="smiles" value="CCO" maxlength="200" />
       <label>FASTA</label>
-      <textarea id="fasta" rows="4">>target
+      <textarea id="fasta" rows="3">>target
 ACDEFGHIKLMNPQRSTVWY</textarea>
-      <label>Backend (FR-13)</label>
+      <label>Backend</label>
       <select id="backend">
         <option value="auto">auto</option>
         <option value="pennylane_default_qubit">pennylane_default_qubit</option>
-        <option value="qiskit_aer_simulator">qiskit_aer_simulator</option>
         <option value="classical_fallback">classical_fallback</option>
       </select>
       <button id="predict-btn">شبیه‌سازی</button>
@@ -40,19 +64,10 @@ ACDEFGHIKLMNPQRSTVWY</textarea>
 
     <section class="card">
       <h2>تولید داده سنتتیک (FR-06)</h2>
-      <label>تعداد نمونه (500–5000)</label>
       <input id="num-samples" type="number" min="1" max="5000" value="100" />
-      <label>SMILES seed (comma-separated)</label>
       <input id="seed-smiles" value="CCO,CC(C)O" />
       <button id="generate-btn">شروع تولید</button>
       <pre id="task-status"></pre>
-    </section>
-
-    <section class="card" id="results">
-      <h2>نتایج (FR-17 / FR-18 / FR-19)</h2>
-      <div id="result-summary">—</div>
-      <iframe id="viewer-frame" title="3D pocket viewer" style="width:100%;height:420px;border:0;display:none;"></iframe>
-      <div id="download-links"></div>
     </section>
   </main>
   <script src="/app.js"></script>

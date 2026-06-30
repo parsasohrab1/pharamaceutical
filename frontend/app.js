@@ -10,12 +10,99 @@ async function api(path, options = {}) {
   const res = await fetch(`${API}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Request failed");
+    throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail));
   }
   return res.json();
 }
 
-document.getElementById("login-btn").onclick = async () => {
+function showPrediction(item) {
+  if (!item) return;
+  document.getElementById("result-summary").innerHTML = `
+    <strong>SMILES:</strong> ${item.smiles_preview || item.smiles || "—"}<br/>
+    <strong>نمره اتصال:</strong> ${item.binding_score} / 100<br/>
+    <strong>انرژی:</strong> ${(item.binding_energy_kcal_mol ?? 0).toFixed?.(3) ?? item.binding_energy_kcal_mol} kcal/mol<br/>
+    <strong>اطمینان:</strong> ${item.confidence}%<br/>
+    <strong>Backend:</strong> ${item.backend || "auto"}
+  `;
+  const frame = document.getElementById("viewer-frame");
+  if (item.viewer_html_url) {
+    frame.src = `${API}${item.viewer_html_url}`;
+  }
+  document.getElementById("download-links").innerHTML = `
+    <p><a href="${API}${item.report_pdf_url}" target="_blank">📄 PDF</a></p>
+    <p><a href="${API}${item.report_csv_url}" target="_blank">📊 CSV</a></p>
+    <p><a href="${API}${item.pocket_pdb_url}" target="_blank">🧬 PDB</a></p>
+  `;
+}
+
+function renderChart(predictions) {
+  const el = document.getElementById("score-chart");
+  if (!predictions.length) {
+    el.innerHTML = "<p>داده‌ای برای نمودار نیست.</p>";
+    return;
+  }
+  const max = Math.max(...predictions.map((p) => p.binding_score), 1);
+  el.innerHTML = predictions
+    .map(
+      (p) => `
+    <div class="bar-row">
+      <span class="bar-label">${p.smiles_preview?.slice(0, 12) || p.request_id.slice(0, 8)}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(p.binding_score / max) * 100}%"></div></div>
+      <span class="bar-val">${p.binding_score}</span>
+    </div>`
+    )
+    .join("");
+}
+
+function renderHistory(predictions) {
+  const tbody = document.getElementById("history-body");
+  tbody.innerHTML = predictions
+    .map(
+      (p) => `
+    <tr data-id="${p.request_id}" class="history-row">
+      <td>${p.smiles_preview}</td>
+      <td>${p.binding_score}</td>
+      <td>${p.confidence}%</td>
+      <td>${p.created_at?.slice(0, 19) || "—"}</td>
+    </tr>`
+    )
+    .join("");
+  tbody.querySelectorAll(".history-row").forEach((row) => {
+    row.onclick = async () => {
+      const detail = await api(`/predictions/${row.dataset.id}`);
+      showPrediction(detail);
+    };
+  });
+}
+
+function renderDataset(datasets) {
+  const panel = document.getElementById("dataset-panel");
+  if (!datasets.length) {
+    panel.textContent = "دیتاستی موجود نیست.";
+    return;
+  }
+  const d = datasets[0];
+  panel.innerHTML = `
+    <p><strong>Task:</strong> ${d.task_id}</p>
+    <p><strong>نمونه‌ها:</strong> ${d.records_generated} / ${d.num_samples}</p>
+    <p><a href="${API}${d.output_csv}" target="_blank">دانلود CSV</a></p>
+    <p><a href="${API}${d.output_json}" target="_blank">دانلود JSON</a></p>
+    <p><a href="${API}${d.output_pdf}" target="_blank">دانلود PDF</a></p>
+  `;
+}
+
+async function loadDashboard() {
+  const data = await api("/dashboard");
+  document.getElementById("stat-predictions").textContent = data.stats.total_predictions;
+  document.getElementById("stat-datasets").textContent = data.stats.total_synthetic_jobs;
+  document.getElementById("stat-avg-score").textContent = data.stats.avg_binding_score;
+  if (data.latest_prediction) showPrediction(data.latest_prediction);
+  renderChart(data.predictions);
+  renderHistory(data.predictions);
+  renderDataset(data.synthetic_datasets);
+}
+
+async function autoLogin() {
   const username = document.getElementById("username").value;
   const password = document.getElementById("password").value;
   const data = await api("/auth/login", {
@@ -24,8 +111,11 @@ document.getElementById("login-btn").onclick = async () => {
   });
   token = data.access_token;
   localStorage.setItem("hqca_token", token);
-  document.getElementById("auth-status").textContent = `Logged in (${data.role})`;
-};
+  document.getElementById("auth-status").textContent = `✓ ${data.role}`;
+  await loadDashboard();
+}
+
+document.getElementById("login-btn").onclick = autoLogin;
 
 document.getElementById("predict-btn").onclick = async () => {
   const body = {
@@ -34,20 +124,8 @@ document.getElementById("predict-btn").onclick = async () => {
     backend: document.getElementById("backend").value,
   };
   const data = await api("/predict", { method: "POST", body: JSON.stringify(body) });
-  document.getElementById("result-summary").innerHTML = `
-    <strong>نمره اتصال:</strong> ${data.binding_score} / 100<br/>
-    <strong>انرژی:</strong> ${data.binding_energy_kcal_mol.toFixed(3)} kcal/mol<br/>
-    <strong>اطمینان:</strong> ${data.confidence}%<br/>
-    <strong>Backend:</strong> ${data.backend} (depth ${data.gate_depth})
-  `;
-  const frame = document.getElementById("viewer-frame");
-  frame.style.display = "block";
-  frame.src = `${API}${data.viewer_html_url}`;
-  document.getElementById("download-links").innerHTML = `
-    <p><a href="${API}${data.report_pdf_url}" target="_blank">PDF report</a></p>
-    <p><a href="${API}${data.report_csv_url}" target="_blank">CSV data</a></p>
-    <p><a href="${API}${data.pocket_pdb_url}" target="_blank">PDB pocket</a></p>
-  `;
+  showPrediction(data);
+  await loadDashboard();
 };
 
 document.getElementById("generate-btn").onclick = async () => {
@@ -62,6 +140,14 @@ document.getElementById("generate-btn").onclick = async () => {
   const poll = setInterval(async () => {
     const st = await api(`/status/${data.task_id}`);
     el.textContent = JSON.stringify(st, null, 2);
-    if (st.status === "completed" || st.status === "failed") clearInterval(poll);
+    if (st.status === "completed" || st.status === "failed") {
+      clearInterval(poll);
+      await loadDashboard();
+    }
   }, 2000);
 };
+
+autoLogin().catch((e) => {
+  document.getElementById("auth-status").textContent = "ورود دستی لازم است";
+  document.getElementById("result-summary").textContent = e.message;
+});

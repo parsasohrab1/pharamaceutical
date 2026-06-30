@@ -29,6 +29,7 @@ from security import (
     require_role,
     verify_password,
 )
+from seed_data import seed_demo_data
 from storage import object_storage
 from validation import normalize_fasta, validate_smiles
 
@@ -70,6 +71,7 @@ async def log_requests(request: Request, call_next):
 def on_startup() -> None:
     init_db()
     from database import SessionLocal
+    from seed_data import seed_demo_data
 
     db = SessionLocal()
     try:
@@ -82,6 +84,10 @@ def on_startup() -> None:
             db.add(admin)
             db.commit()
             LOGGER.info("Default admin user created", extra={"hqca_event": "admin_seed"})
+        if os.getenv("HQCA_SEED_DEMO", "true").lower() == "true":
+            seeded = seed_demo_data(db)
+            if seeded["predictions"] or seeded["datasets"]:
+                LOGGER.info("Demo data ready", extra={"hqca_event": "demo_seeded", **{f"hqca_{k}": v for k, v in seeded.items()}})
     finally:
         db.close()
 
@@ -331,11 +337,131 @@ def prediction_history(
             "request_id": r.request_id,
             "created_at": r.created_at,
             "binding_score": r.binding_score,
+            "binding_energy_kcal_mol": r.binding_energy_kcal_mol,
             "confidence": r.confidence,
             "backend": r.backend,
-            "smiles_preview": decrypt_sensitive(r.encrypted_smiles)[:20] + "...",
+            "smiles_preview": decrypt_sensitive(r.encrypted_smiles)[:24],
+            "viewer_html_url": r.viewer_html_object,
+            "report_pdf_url": r.report_pdf_object,
+            "report_csv_url": r.report_csv_object,
+            "pocket_pdb_url": r.pocket_pdb_object,
         }
         for r in rows
+    ]
+
+
+@app.get("/predictions/{request_id}")
+def prediction_detail(
+    request_id: str,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("researcher", "admin")),
+):
+    row = db.get(PredictionResult, request_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    if user["role"] != "admin" and row.user_id != user["uid"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    center = json.loads(row.pocket_center_json)
+    return {
+        "request_id": row.request_id,
+        "created_at": row.created_at,
+        "smiles": decrypt_sensitive(row.encrypted_smiles),
+        "fasta": decrypt_sensitive(row.encrypted_fasta),
+        "binding_score": row.binding_score,
+        "binding_energy_kcal_mol": row.binding_energy_kcal_mol,
+        "confidence": row.confidence,
+        "backend": row.backend,
+        "pocket_center": center,
+        "viewer_html_url": row.viewer_html_object,
+        "report_pdf_url": row.report_pdf_object,
+        "report_csv_url": row.report_csv_object,
+        "pocket_pdb_url": row.pocket_pdb_object,
+    }
+
+
+@app.get("/dashboard")
+def dashboard_summary(
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("researcher", "admin")),
+):
+    pred_query = db.query(PredictionResult)
+    task_query = db.query(ProcessingTask).filter(ProcessingTask.status == "completed")
+    if user["role"] != "admin":
+        pred_query = pred_query.filter(PredictionResult.user_id == user["uid"])
+        task_query = task_query.filter(ProcessingTask.user_id == user["uid"])
+
+    predictions = pred_query.order_by(PredictionResult.created_at.desc()).limit(10).all()
+    tasks = task_query.order_by(ProcessingTask.updated_at.desc()).limit(5).all()
+    latest = predictions[0] if predictions else None
+
+    return {
+        "stats": {
+            "total_predictions": pred_query.count(),
+            "total_synthetic_jobs": task_query.count(),
+            "avg_binding_score": round(
+                sum(p.binding_score for p in predictions) / max(len(predictions), 1), 2
+            ),
+        },
+        "latest_prediction": None
+        if latest is None
+        else {
+            "request_id": latest.request_id,
+            "created_at": latest.created_at,
+            "binding_score": latest.binding_score,
+            "binding_energy_kcal_mol": latest.binding_energy_kcal_mol,
+            "confidence": latest.confidence,
+            "backend": latest.backend,
+            "smiles_preview": decrypt_sensitive(latest.encrypted_smiles)[:40],
+            "viewer_html_url": latest.viewer_html_object,
+            "report_pdf_url": latest.report_pdf_object,
+            "report_csv_url": latest.report_csv_object,
+            "pocket_pdb_url": latest.pocket_pdb_object,
+        },
+        "predictions": [
+            {
+                "request_id": p.request_id,
+                "created_at": p.created_at,
+                "binding_score": p.binding_score,
+                "confidence": p.confidence,
+                "smiles_preview": decrypt_sensitive(p.encrypted_smiles)[:24],
+                "viewer_html_url": p.viewer_html_object,
+            }
+            for p in predictions
+        ],
+        "synthetic_datasets": [
+            {
+                "task_id": t.task_id,
+                "num_samples": t.num_samples,
+                "records_generated": t.records_generated,
+                "output_csv": t.output_csv_object,
+                "output_json": t.output_json_object,
+                "output_pdf": t.output_pdf_object,
+                "updated_at": t.updated_at,
+            }
+            for t in tasks
+        ],
+    }
+
+
+@app.get("/dashboard/datasets")
+def dashboard_datasets(
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("researcher", "admin")),
+):
+    query = db.query(ProcessingTask).filter(ProcessingTask.status == "completed")
+    if user["role"] != "admin":
+        query = query.filter(ProcessingTask.user_id == user["uid"])
+    tasks = query.order_by(ProcessingTask.updated_at.desc()).all()
+    return [
+        {
+            "task_id": t.task_id,
+            "num_samples": t.num_samples,
+            "records_generated": t.records_generated,
+            "output_csv": t.output_csv_object,
+            "output_json": t.output_json_object,
+            "output_pdf": t.output_pdf_object,
+        }
+        for t in tasks
     ]
 
 
